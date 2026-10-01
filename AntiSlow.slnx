@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/AntiSlow.Core.Tests/AntiSlow.Core.Tests.csproj" />
+  </Folder>
+  <Project Path="AntiSlow.Core/AntiSlow.Core.csproj" />
+  <Project Path="AntiSlowPlugin.csproj" />
+</Solution>

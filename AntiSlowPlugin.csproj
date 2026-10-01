@@ -1,35 +1,34 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Cible .NET 8.0 comme requis par CounterStrikeSharp -->
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AssemblyName>AntiSlowPlugin</AssemblyName>
     <RootNamespace>AntiSlowPlugin</RootNamespace>
-    <!-- Pas de copie des DLL de dépendances dans le dossier de sortie -->
+    <Version>2.0.0</Version>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-    <!--
-      Dossier de sortie : structure de release prête à déployer.
-      Le DLL compilé atterrit directement dans
-        addons/counterstrikesharp/plugins/AntiSlowPlugin/
-    -->
+    <!-- Release-ready layout: the build lands in addons/counterstrikesharp/plugins/AntiSlowPlugin/ -->
     <OutputPath>addons\counterstrikesharp\plugins\AntiSlowPlugin\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
-    <!--
-      Référence NuGet : CounterStrikeSharp API (dernière version stable).
-      Ne pas inclure dans le build final car déjà présente sur le serveur.
-    -->
-    <PackageReference Include="CounterStrikeSharp.API" Version="*">
-      <ExcludeAssets>runtime</ExcludeAssets>
-    </PackageReference>
+    <Compile Remove="AntiSlow.Core\**;tests\**" />
+    <None Remove="AntiSlow.Core\**;tests\**" />
   </ItemGroup>
 
-  <!-- Fichiers de langues : copiés dans lang/ à côté du DLL au build -->
+  <ItemGroup>
+    <!-- Pinned: the server provides the runtime assembly; a floating version would change what each build compiles against. -->
+    <PackageReference Include="CounterStrikeSharp.API" Version="1.0.370">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <ProjectReference Include="AntiSlow.Core\AntiSlow.Core.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <Content Include="lang\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
