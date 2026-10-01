@@ -21,7 +21,8 @@ public sealed class AntiSlowConfig : BasePluginConfig
     // vtable index of CPlayer_MovementServices::RunCommand (CS2 build of October 2026). Update it here if a game update moves it.
     public int RunCommandOffsetLinux { get; set; } = 26;
 
-    public int RunCommandOffsetWindows { get; set; } = 25;
+    // Not validated in game on Windows yet: -1 keeps the hook off there until an offset is confirmed.
+    public int RunCommandOffsetWindows { get; set; } = -1;
 
     // Offset of CInButtonStatePB inside CUserCmd; pressed and changed button masks follow at +0x8 and +0x10.
     public int UserCmdButtonStateOffset { get; set; } = 0x58;
@@ -36,7 +37,12 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
     public override string ModuleAuthor => "NeuTroNBZh";
     public override string ModuleDescription => "Blocks slow-walk (Shift) for targeted players.";
 
+    private const int MaxVtableOffset = 200;
+    private const int MaxUserCmdOffset = 0x400;
+    private static readonly ulong KnownButtons = Enum.GetValues<PlayerButtons>().Aggregate(0UL, (mask, b) => mask | (ulong)b);
+
     private VirtualFunctionVoid<nint, nint>? _runCommand;
+    private bool _hookDisabled;
     private BlockList _blocks = BlockList.Empty;
     private string _storePath = string.Empty;
 
@@ -46,7 +52,8 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
 
     public override void Load(bool hotReload)
     {
-        _storePath = Path.Combine(ModuleDirectory, "blocks.json");
+        // Next to the plugin config, so redeploying the plugin folder never erases the blocks.
+        _storePath = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", "..", "configs", "plugins", ModuleName, "blocks.json"));
         _blocks = LoadBlocks();
 
         AddCommand("css_antislow", "Blocks a player's slow-walk.", OnAntiSlowCommand);
@@ -71,6 +78,12 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
     private void HookRunCommand()
     {
         var offset = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? Config.RunCommandOffsetLinux : Config.RunCommandOffsetWindows;
+        if (offset is < 1 or > MaxVtableOffset || Config.UserCmdButtonStateOffset is < 0 or > MaxUserCmdOffset)
+        {
+            Logger.LogError("[AntiSlow] RunCommand offset {Offset} / button state offset {ButtonOffset} out of range: blocks are recorded but not enforced",
+                offset, Config.UserCmdButtonStateOffset);
+            return;
+        }
         try
         {
             _runCommand = new VirtualFunctionVoid<nint, nint>("CCSPlayer_MovementServices", offset);
@@ -83,20 +96,38 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
         }
     }
 
-    private unsafe HookResult OnRunCommand(DynamicHook hook)
+    private HookResult OnRunCommand(DynamicHook hook)
     {
-        if (_blocks.Entries.Count == 0)
+        if (_hookDisabled || _blocks.Entries.Count == 0)
         {
             return HookResult.Continue;
         }
+        try
+        {
+            StripWalk(hook);
+        }
+        catch (Exception ex)
+        {
+            DisableHook(ex, "an exception was thrown in the movement hook");
+        }
+        return HookResult.Continue;
+    }
+
+    private unsafe void StripWalk(DynamicHook hook)
+    {
         var services = hook.GetParam<CCSPlayer_MovementServices>(0);
         var command = hook.GetParam<nint>(1);
         if (command == 0 || services?.Pawn.Value?.Controller.Value?.As<CCSPlayerController>() is not { IsValid: true } player
             || !_blocks.IsBlocked(player.SteamID))
         {
-            return HookResult.Continue;
+            return;
         }
         var buttons = (ulong*)(command + Config.UserCmdButtonStateOffset + 0x8);
+        if (!WalkButtons.LooksLikeButtons(buttons[0], buttons[1], KnownButtons))
+        {
+            DisableHook(null, $"the player command does not hold button masks ({buttons[0]:X}, {buttons[1]:X}), the offsets no longer match this CS2 build");
+            return;
+        }
         buttons[0] = WalkButtons.Strip(buttons[0]);
         buttons[1] = WalkButtons.Strip(buttons[1]);
         var states = services.Buttons.ButtonStates;
@@ -104,7 +135,18 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
         {
             states[i] = WalkButtons.Strip(states[i]);
         }
-        return HookResult.Continue;
+    }
+
+    // Never write into native memory again once something looks wrong: a blocked player can walk, the server stays up.
+    private void DisableHook(Exception? ex, string reason)
+    {
+        _hookDisabled = true;
+        Logger.LogError(ex, "[AntiSlow] Enforcement disabled: {Reason}. Update the offsets in AntiSlowPlugin.json and reload the plugin.", reason);
+        Server.NextFrame(() =>
+        {
+            _runCommand?.Unhook(OnRunCommand, HookMode.Pre);
+            _runCommand = null;
+        });
     }
 
     // =========================================================================
@@ -131,7 +173,18 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
     {
         try
         {
-            return File.Exists(_storePath) ? BlockListJson.Parse(File.ReadAllText(_storePath)) : BlockList.Empty;
+            if (!File.Exists(_storePath))
+            {
+                return BlockList.Empty;
+            }
+            if (BlockListJson.TryParse(File.ReadAllText(_storePath), out var blocks))
+            {
+                return blocks;
+            }
+            var copy = $"{_storePath}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmss}";
+            File.Copy(_storePath, copy, overwrite: true);
+            Logger.LogWarning("[AntiSlow] {File} is corrupt: a copy was kept as {Copy}, starting without blocks", _storePath, copy);
+            return BlockList.Empty;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -140,12 +193,16 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
         }
     }
 
+    // Written to a temporary file then moved: a crash during the write never leaves a truncated blocks.json.
     private void SetBlocks(BlockList blocks)
     {
         _blocks = blocks;
         try
         {
-            File.WriteAllText(_storePath, BlockListJson.Serialize(blocks));
+            Directory.CreateDirectory(Path.GetDirectoryName(_storePath)!);
+            var temporary = _storePath + ".tmp";
+            File.WriteAllText(temporary, BlockListJson.Serialize(blocks));
+            File.Move(temporary, _storePath, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -165,14 +222,14 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
         }
         if (command.ArgCount < 2)
         {
-            caller?.PrintToChat(Localizer["antislow.usage.antislow"]);
+            Reply(caller, Localizer["antislow.usage.antislow"]);
             return;
         }
         var nameArg = command.GetArg(1);
         var matches = FindPlayersByName(nameArg);
         if (matches.Count == 0)
         {
-            caller?.PrintToChat(Localizer["antislow.player.notfound", nameArg]);
+            Reply(caller, Localizer["antislow.player.notfound", nameArg]);
             return;
         }
         if (matches.Count > 1)
@@ -214,14 +271,14 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
         }
         if (command.ArgCount < 2)
         {
-            caller?.PrintToChat(Localizer["antislow.usage.unantislow"]);
+            Reply(caller, Localizer["antislow.usage.unantislow"]);
             return;
         }
         var nameArg = command.GetArg(1);
         var matches = _blocks.FindByName(nameArg);
         if (matches.Count == 0)
         {
-            caller?.PrintToChat(Localizer["antislow.blocked.notfound", nameArg]);
+            Reply(caller, Localizer["antislow.blocked.notfound", nameArg]);
             return;
         }
         if (matches.Count > 1)

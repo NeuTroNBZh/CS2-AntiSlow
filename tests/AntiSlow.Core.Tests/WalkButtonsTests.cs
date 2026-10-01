@@ -22,4 +22,16 @@ public class WalkButtonsTests
     {
         Assert.Equal(0x40804UL, WalkButtons.Strip(0x40804));
     }
+
+    // Known IN_* bits only: anything else means the hooked function is not RunCommand any more (game update).
+    [Theory]
+    [InlineData(0x10408UL, 0UL, true)]
+    [InlineData(0UL, 0UL, true)]
+    [InlineData(0x8UL, 0x10000UL, true)]
+    [InlineData(0x7FFF_0000_0000_0000UL, 0UL, false)]
+    [InlineData(0x8UL, 0x1_0000_0000_0000UL, false)]
+    public void LooksLikeButtons_RejectsUnknownBits(ulong pressed, ulong changed, bool expected)
+    {
+        Assert.Equal(expected, WalkButtons.LooksLikeButtons(pressed, changed, knownMask: 0xF_FFFF_FFFFUL));
+    }
 }
