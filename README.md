@@ -98,9 +98,14 @@ addons/
           zh-Hans.json
 ```
 
-## Compatibility
+## CS2-SimpleAdmin
 
-Current branch is standalone and does not require external CS2-SimpleAdmin API DLLs to compile.
+When [CS2-SimpleAdmin](https://github.com/daffyyyy/CS2-SimpleAdmin) is installed, an **AntiSlow** category appears in `!admin` (same permission as the commands):
+
+- **Block a player's slow-walk**: connected players that are not blocked yet; choosing one blocks them permanently.
+- **Unblock a player's slow-walk**: blocked players; choosing one lifts the block.
+
+The integration needs no SimpleAdmin DLL to build: the API is found at runtime. Without SimpleAdmin the plugin works on its own.
 
 ## Author
 

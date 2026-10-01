@@ -4,6 +4,7 @@
 // computes the movement: the player runs (and is heard) instead of walking. Clearing the buttons later in the tick, as
 // v1 did, comes after the movement has already been computed and has no effect.
 
+using System.Reflection;
 using System.Runtime.InteropServices;
 using AntiSlow.Core;
 using CounterStrikeSharp.API;
@@ -33,7 +34,7 @@ public sealed class AntiSlowConfig : BasePluginConfig
 public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
 {
     public override string ModuleName => "AntiSlowPlugin";
-    public override string ModuleVersion => "2.0.0";
+    public override string ModuleVersion => "2.1.0";
     public override string ModuleAuthor => "NeuTroNBZh";
     public override string ModuleDescription => "Blocks slow-walk (Shift) for targeted players.";
 
@@ -45,6 +46,7 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
     private bool _hookDisabled;
     private BlockList _blocks = BlockList.Empty;
     private string _storePath = string.Empty;
+    private SimpleAdminMenu? _adminMenu;
 
     public AntiSlowConfig Config { get; set; } = new();
 
@@ -67,9 +69,49 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
 
     public override void Unload(bool hotReload)
     {
+        _adminMenu?.Unregister();
+        _adminMenu = null;
         _runCommand?.Unhook(OnRunCommand, HookMode.Pre);
         _runCommand = null;
     }
+
+    // SimpleAdmin publishes its API while plugins load: the menu entries are added once every plugin is loaded.
+    public override void OnAllPluginsLoaded(bool hotReload)
+    {
+        if (SimpleAdminMenu.TryFind(Logger) is not { } menu)
+        {
+            return;
+        }
+        try
+        {
+            menu.RegisterCategory(Localizer["antislow.menu.category"], Config.Permission);
+            menu.RegisterPlayerList("antislow_block", Localizer["antislow.menu.block"], Config.Permission, BlockChoices, Localizer["antislow.menu.none"]);
+            menu.RegisterPlayerList("antislow_unblock", Localizer["antislow.menu.unblock"], Config.Permission, UnblockChoices, Localizer["antislow.menu.none"]);
+            _adminMenu = menu;
+            Logger.LogInformation("[AntiSlow] Entries added to the CS2-SimpleAdmin menu");
+        }
+        catch (TargetInvocationException ex)
+        {
+            Logger.LogWarning(ex.InnerException ?? ex, "[AntiSlow] CS2-SimpleAdmin menu registration failed");
+        }
+    }
+
+    private IReadOnlyList<(string Label, Action<CCSPlayerController> Choose)> BlockChoices() =>
+        _blocks.Unblocked(FindPlayersByName(string.Empty).Select(p => (p.SteamID, p.PlayerName)))
+            .Select(p => (p.Name, (Action<CCSPlayerController>)(admin =>
+            {
+                if (Utilities.GetPlayers().FirstOrDefault(c => c.IsValid && c.SteamID == p.SteamId) is { } target)
+                {
+                    BlockPlayer(admin, target, BlockEntry.Permanent, string.Empty);
+                }
+            })))
+            .ToList();
+
+    private IReadOnlyList<(string Label, Action<CCSPlayerController> Choose)> UnblockChoices() =>
+        _blocks.Entries.Values
+            .OrderBy(e => e.PlayerName, StringComparer.OrdinalIgnoreCase)
+            .Select(e => (e.PlayerName, (Action<CCSPlayerController>)(admin => UnblockPlayer(admin, e))))
+            .ToList();
 
     // =========================================================================
     //  MOVEMENT HOOK
@@ -253,9 +295,13 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
             }
         }
 
-        var target = matches[0];
+        BlockPlayer(caller, matches[0], rounds, reason);
+    }
+
+    private void BlockPlayer(CCSPlayerController? admin, CCSPlayerController target, int rounds, string reason)
+    {
         SetBlocks(_blocks.Block(new BlockEntry(target.SteamID, target.PlayerName, rounds, reason)));
-        var adminName = caller?.PlayerName ?? "Console";
+        var adminName = admin?.PlayerName ?? "Console";
         var roundsSuffix = rounds == BlockEntry.Permanent ? string.Empty : Localizer["antislow.suffix.rounds", rounds].ToString();
         var reasonSuffix = string.IsNullOrEmpty(reason) ? string.Empty : Localizer["antislow.suffix.reason", reason].ToString();
         Server.PrintToChatAll(Localizer["antislow.chat.blocked", adminName, target.PlayerName, roundsSuffix, reasonSuffix]);
@@ -286,9 +332,13 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
             ListAmbiguous(caller, Localizer["antislow.blocked.ambiguous"], matches.Select(m => m.PlayerName));
             return;
         }
-        var entry = matches[0];
+        UnblockPlayer(caller, matches[0]);
+    }
+
+    private void UnblockPlayer(CCSPlayerController? admin, BlockEntry entry)
+    {
         SetBlocks(_blocks.Unblock(entry.SteamId));
-        var adminName = caller?.PlayerName ?? "Console";
+        var adminName = admin?.PlayerName ?? "Console";
         Server.PrintToChatAll(Localizer["antislow.chat.unblocked", adminName, entry.PlayerName]);
         Logger.LogInformation("[AntiSlow] {Admin} unblocked {Target}", adminName, entry.PlayerName);
     }

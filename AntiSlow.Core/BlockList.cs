@@ -29,6 +29,12 @@ public sealed record BlockList(ImmutableDictionary<ulong, BlockEntry> Entries)
             .OrderBy(e => e.PlayerName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+    public IReadOnlyList<(ulong SteamId, string Name)> Unblocked(IEnumerable<(ulong SteamId, string Name)> online) =>
+        online
+            .Where(p => !IsBlocked(p.SteamId))
+            .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
     public (BlockList Next, IReadOnlyList<BlockEntry> Expired) RoundEnded()
     {
         var expired = new List<BlockEntry>();
