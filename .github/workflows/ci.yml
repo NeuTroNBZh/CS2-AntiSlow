@@ -17,10 +17,10 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
-
-      - name: Restore
-        run: dotnet restore AntiSlowPlugin.csproj
+          dotnet-version: 10.0.x
 
       - name: Build
-        run: dotnet build AntiSlowPlugin.csproj -c Release --no-restore
+        run: dotnet build AntiSlow.slnx -c Release
+
+      - name: Test
+        run: dotnet test tests/AntiSlow.Core.Tests -c Release --no-build

@@ -4,16 +4,17 @@ AntiSlowPlugin is a CounterStrikeSharp plugin for CS2 that blocks slow-walk (Shi
 
 ## Highlights
 
-- Blocks Shift slow-walk in real time
-- Supports temporary blocks (in rounds) and permanent blocks
+- Really blocks Shift slow-walk: the walk key is removed from the player's command before the engine computes the movement, so a blocked player runs and is heard
+- Temporary blocks (in rounds) and permanent blocks
+- Blocks are kept by SteamID across reconnects and server restarts (`blocks.json`)
 - Full localization support via JSON files
-- Lightweight and production-ready for .NET 8 / CounterStrikeSharp
+- .NET 10 / CounterStrikeSharp 1.0.370+
 
 ## Requirements
 
 - Counter-Strike 2 dedicated server
-- CounterStrikeSharp installed
-- .NET 8 SDK (for local build only)
+- Metamod:Source and CounterStrikeSharp 1.0.370 or later
+- .NET 10 SDK (for local build only)
 
 ## Installation (From Release)
 
@@ -39,6 +40,19 @@ Admins need:
 
 - `@css/kick`
 
+## Configuration
+
+`addons/counterstrikesharp/configs/plugins/AntiSlowPlugin/AntiSlowPlugin.json` is created on first start:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `Permission` | `@css/kick` | Permission needed for the commands |
+| `RunCommandOffsetLinux` | `26` | vtable index of `CPlayer_MovementServices::RunCommand` on Linux |
+| `RunCommandOffsetWindows` | `25` | Same on Windows |
+| `UserCmdButtonStateOffset` | `0x58` (88) | Offset of the button state inside the player command |
+
+The offsets match the CS2 build of October 2026. If a game update moves them, the plugin logs `RunCommand could not be hooked` (or blocked players can walk again): update the values here, no rebuild needed.
+
 ## Localization
 
 Language files are in `lang/`:
@@ -54,8 +68,8 @@ Language files are in `lang/`:
 ## Build
 
 ```powershell
-dotnet restore
-dotnet build -c Release
+dotnet build AntiSlow.slnx -c Release
+dotnet test tests/AntiSlow.Core.Tests
 ```
 
 Build output is generated in:
@@ -73,6 +87,7 @@ addons/
       AntiSlowPlugin/
         AntiSlowPlugin.dll
         AntiSlowPlugin.deps.json
+        AntiSlow.Core.dll
         lang/
           en.json
           fr.json
