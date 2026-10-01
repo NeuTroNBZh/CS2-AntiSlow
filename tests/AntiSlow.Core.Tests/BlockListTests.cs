@@ -66,4 +66,14 @@ public class BlockListTests
     {
         Assert.Equal(expected, BlockEntry.RoundsFromArgument(argument));
     }
+
+    // The SimpleAdmin "block" menu lists connected players that are not blocked yet, by name.
+    [Fact]
+    public void Unblocked_KeepsOnlyPlayersWithoutABlock_SortedByName()
+    {
+        var list = BlockList.Empty.Block(new BlockEntry(2, "Bob", BlockEntry.Permanent, ""));
+        var online = new[] { (SteamId: 3UL, Name: "carl"), (SteamId: 2UL, Name: "Bob"), (SteamId: 1UL, Name: "Alice") };
+
+        Assert.Equal(new[] { "Alice", "carl" }, list.Unblocked(online).Select(p => p.Name));
+    }
 }
