@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
+## 2.3.0 - 2026-10-02
+
+- `css_antislow_state` (server console and RCON only) prints the blocked SteamIDs as one JSON line, so remote tools (Retake Deck) can show who is blocked and offer "unblock".
+
 ## 2.2.0 - 2026-10-02
 
 - `css_antislow` and `css_unantislow` accept `#<userid>` to target one player exactly. An argument starting with `#` is never matched as a nickname, so remote tools (Retake Deck over RCON) never have to pass a nickname to the server console.
