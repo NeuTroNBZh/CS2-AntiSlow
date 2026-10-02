@@ -34,7 +34,7 @@ public sealed class AntiSlowConfig : BasePluginConfig
 public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
 {
     public override string ModuleName => "AntiSlowPlugin";
-    public override string ModuleVersion => "2.1.0";
+    public override string ModuleVersion => "2.2.0";
     public override string ModuleAuthor => "NeuTroNBZh";
     public override string ModuleDescription => "Blocks slow-walk (Shift) for targeted players.";
 
@@ -268,7 +268,7 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
             return;
         }
         var nameArg = command.GetArg(1);
-        var matches = FindPlayersByName(nameArg);
+        var matches = FindPlayers(nameArg);
         if (matches.Count == 0)
         {
             Reply(caller, Localizer["antislow.player.notfound", nameArg]);
@@ -321,7 +321,7 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
             return;
         }
         var nameArg = command.GetArg(1);
-        var matches = _blocks.FindByName(nameArg);
+        var matches = FindBlocked(nameArg);
         if (matches.Count == 0)
         {
             Reply(caller, Localizer["antislow.blocked.notfound", nameArg]);
@@ -397,6 +397,31 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
             return;
         }
         caller.PrintToChat(message);
+    }
+
+    // "#<userid>" targets one connected player exactly and is never searched as a name fragment.
+    private static List<CCSPlayerController> FindPlayers(string argument)
+    {
+        if (!PlayerTarget.IsUserIdSyntax(argument))
+        {
+            return FindPlayersByName(argument);
+        }
+        var humans = Utilities.GetPlayers().Where(p => p is { IsValid: true, IsBot: false, UserId: not null });
+        return PlayerTarget.Resolve(argument, humans, p => p.UserId!.Value) is { } player
+            ? new List<CCSPlayerController> { player }
+            : new List<CCSPlayerController>();
+    }
+
+    private IReadOnlyList<BlockEntry> FindBlocked(string argument)
+    {
+        if (!PlayerTarget.IsUserIdSyntax(argument))
+        {
+            return _blocks.FindByName(argument);
+        }
+        var player = FindPlayers(argument).FirstOrDefault();
+        return player is not null && _blocks.Entries.TryGetValue(player.SteamID, out var entry)
+            ? new[] { entry }
+            : Array.Empty<BlockEntry>();
     }
 
     private static List<CCSPlayerController> FindPlayersByName(string fragment) =>

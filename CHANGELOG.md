@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
+## 2.2.0 - 2026-10-02
+
+- `css_antislow` and `css_unantislow` accept `#<userid>` to target one player exactly. An argument starting with `#` is never matched as a nickname, so remote tools (Retake Deck over RCON) never have to pass a nickname to the server console.
+
 ## 2.1.0 - 2026-10-01
 
 - CS2-SimpleAdmin integration: an **AntiSlow** category in `!admin` with "Block a player's slow-walk" (connected players not blocked yet) and "Unblock a player's slow-walk" (blocked players). Optional and resolved at runtime: without SimpleAdmin, or with an incompatible version, the plugin works as before and logs why.
