@@ -406,10 +406,10 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
         {
             return FindPlayersByName(argument);
         }
-        return PlayerTarget.UserIdOf(argument) is { } userId
-            && Utilities.GetPlayerFromUserid(userId) is { IsValid: true, IsBot: false } player
-                ? new List<CCSPlayerController> { player }
-                : new List<CCSPlayerController>();
+        var humans = Utilities.GetPlayers().Where(p => p is { IsValid: true, IsBot: false, UserId: not null });
+        return PlayerTarget.Resolve(argument, humans, p => p.UserId!.Value) is { } player
+            ? new List<CCSPlayerController> { player }
+            : new List<CCSPlayerController>();
     }
 
     private IReadOnlyList<BlockEntry> FindBlocked(string argument)

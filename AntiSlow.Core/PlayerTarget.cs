@@ -7,6 +7,11 @@ public static class PlayerTarget
 {
     public static bool IsUserIdSyntax(string argument) => argument.Trim().StartsWith('#');
 
+    // Exact match among the given (connected) players: never an engine index lookup, which wraps around and can
+    // return any entity.
+    public static T? Resolve<T>(string argument, IEnumerable<T> players, Func<T, int> userIdOf) where T : class =>
+        UserIdOf(argument) is { } id ? players.FirstOrDefault(p => userIdOf(p) == id) : null;
+
     public static int? UserIdOf(string argument)
     {
         var text = argument.Trim();
