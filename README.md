@@ -32,6 +32,8 @@ addons/counterstrikesharp/plugins/AntiSlowPlugin/
 
 - `css_antislow <player> [rounds] [reason...]`
 - `css_unantislow <player>`
+
+`<player>` is a part of the nickname, or `#<userid>` to target one player exactly (used by remote tools; never matched as a nickname).
 - `css_antislowlist`
 
 ## Permission
