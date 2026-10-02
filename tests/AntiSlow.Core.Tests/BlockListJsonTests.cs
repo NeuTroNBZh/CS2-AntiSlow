@@ -33,4 +33,17 @@ public class BlockListJsonTests
         Assert.False(BlockListJson.TryParse(content, out var list));
         Assert.Empty(list.Entries);
     }
+
+    // Remote tools read one console line with the blocked SteamIDs (as text, sorted).
+    [Fact]
+    public void StateLine_ListsBlockedSteamIds()
+    {
+        var list = BlockList.Empty
+            .Block(new BlockEntry(76561199086320654, "Ahno", BlockEntry.Permanent, ""))
+            .Block(new BlockEntry(76561199051460419, "Neo", 3, ""));
+        Assert.Equal("ANTISLOW_STATE {\"blocked\":[\"76561199051460419\",\"76561199086320654\"]}", BlockListJson.StateLine(list));
+    }
+
+    [Fact]
+    public void StateLine_EmptyList() => Assert.Equal("ANTISLOW_STATE {\"blocked\":[]}", BlockListJson.StateLine(BlockList.Empty));
 }

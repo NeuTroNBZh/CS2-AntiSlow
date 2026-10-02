@@ -8,6 +8,13 @@ public static class BlockListJson
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
+    // One console line for remote tools (Retake Deck over RCON): blocked SteamIDs as text, sorted.
+    public static string StateLine(BlockList list) =>
+        "ANTISLOW_STATE " + JsonSerializer.Serialize(new
+        {
+            blocked = list.Entries.Keys.Order().Select(id => id.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        });
+
     public static string Serialize(BlockList list) =>
         JsonSerializer.Serialize(list.Entries.Values.OrderBy(e => e.SteamId).ToList(), Options);
 

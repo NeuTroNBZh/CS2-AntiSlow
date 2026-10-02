@@ -34,7 +34,7 @@ public sealed class AntiSlowConfig : BasePluginConfig
 public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
 {
     public override string ModuleName => "AntiSlowPlugin";
-    public override string ModuleVersion => "2.2.0";
+    public override string ModuleVersion => "2.3.0";
     public override string ModuleAuthor => "NeuTroNBZh";
     public override string ModuleDescription => "Blocks slow-walk (Shift) for targeted players.";
 
@@ -61,6 +61,7 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
         AddCommand("css_antislow", "Blocks a player's slow-walk.", OnAntiSlowCommand);
         AddCommand("css_unantislow", "Unblocks a player's slow-walk.", OnUnAntiSlowCommand);
         AddCommand("css_antislowlist", "Lists players whose slow-walk is blocked.", OnAntiSlowListCommand);
+        AddCommand("css_antislow_state", "Prints the blocked SteamIDs as one JSON line (console only).", OnStateCommand);
         RegisterEventHandler<EventRoundEnd>(OnRoundEnd);
 
         HookRunCommand();
@@ -307,6 +308,17 @@ public sealed class AntiSlowPlugin : BasePlugin, IPluginConfig<AntiSlowConfig>
         Server.PrintToChatAll(Localizer["antislow.chat.blocked", adminName, target.PlayerName, roundsSuffix, reasonSuffix]);
         Logger.LogInformation("[AntiSlow] {Admin} blocked {Target} (rounds: {Rounds}, reason: {Reason})",
             adminName, target.PlayerName, rounds == BlockEntry.Permanent ? "permanent" : rounds.ToString(), reason);
+    }
+
+    // Console and RCON only: remote tools poll it, players have css_antislowlist.
+    private void OnStateCommand(CCSPlayerController? caller, CommandInfo command)
+    {
+        if (caller is not null)
+        {
+            caller.PrintToChat(Localizer["antislow.noperm"]);
+            return;
+        }
+        command.ReplyToCommand(BlockListJson.StateLine(_blocks));
     }
 
     private void OnUnAntiSlowCommand(CCSPlayerController? caller, CommandInfo command)
